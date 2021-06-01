@@ -2,6 +2,10 @@
 
 [![npm version](https://badge.fury.io/js/redux-axios-middleware.svg)](https://badge.fury.io/js/redux-axios-middleware)
 
+# NEW:
+> Return _FAIL on status >= 400
+
+___
 
 Redux middleware for fetching data with axios HTTP client
 
