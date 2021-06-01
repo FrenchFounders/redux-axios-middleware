@@ -16,9 +16,9 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	function __webpack_require__(moduleId) {
 /******/
 /******/ 		// Check if module is in cache
-/******/ 		if(installedModules[moduleId])
+/******/ 		if(installedModules[moduleId]) {
 /******/ 			return installedModules[moduleId].exports;
-/******/
+/******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
 /******/ 		var module = installedModules[moduleId] = {
 /******/ 			i: moduleId,
@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 4);
+/******/ 	return __webpack_require__(__webpack_require__.s = 3);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -88,19 +88,22 @@ Object.defineProperty(exports, "__esModule", {
 });
 var SUCCESS_SUFFIX = exports.SUCCESS_SUFFIX = '_SUCCESS';
 var ERROR_SUFFIX = exports.ERROR_SUFFIX = '_FAIL';
+var CANCEL_SUFFIX = exports.CANCEL_SUFFIX = '_CANCEL';
 
 var getActionTypes = exports.getActionTypes = function getActionTypes(action) {
   var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
       _ref$errorSuffix = _ref.errorSuffix,
       errorSuffix = _ref$errorSuffix === undefined ? ERROR_SUFFIX : _ref$errorSuffix,
       _ref$successSuffix = _ref.successSuffix,
-      successSuffix = _ref$successSuffix === undefined ? SUCCESS_SUFFIX : _ref$successSuffix;
+      successSuffix = _ref$successSuffix === undefined ? SUCCESS_SUFFIX : _ref$successSuffix,
+      _ref$cancelSuffix = _ref.cancelSuffix,
+      cancelSuffix = _ref$cancelSuffix === undefined ? CANCEL_SUFFIX : _ref$cancelSuffix;
 
   var types = void 0;
   if (typeof action.type !== 'undefined') {
     var type = action.type;
 
-    types = [type, '' + type + successSuffix, '' + type + errorSuffix];
+    types = [type, '' + type + successSuffix, '' + type + errorSuffix, '' + type + cancelSuffix];
   } else if (typeof action.types !== 'undefined') {
     types = action.types;
   } else {
@@ -212,7 +215,12 @@ var multiClientMiddleware = exports.multiClientMiddleware = function multiClient
           actionOptions.onComplete({ action: newAction, next: next, getState: getState, dispatch: dispatch }, actionOptions);
           return newAction;
         }, function (error) {
-          var newAction = actionOptions.onError({ action: action, next: next, error: error, getState: getState, dispatch: dispatch }, actionOptions);
+          var newAction = void 0;
+          if (middlewareOptions.isCancel(error)) {
+            newAction = actionOptions.onCancel({ action: action, next: next, error: error, getState: getState, dispatch: dispatch }, actionOptions);
+          } else {
+            newAction = actionOptions.onError({ action: action, next: next, error: error, getState: getState, dispatch: dispatch }, actionOptions);
+          }
           actionOptions.onComplete({ action: newAction, next: next, getState: getState, dispatch: dispatch }, actionOptions);
           return actionOptions.returnRejectedPromiseOnError ? Promise.reject(newAction) : newAction;
         });
@@ -237,7 +245,7 @@ exports.default = function (client, customMiddlewareOptions, customClientOptions
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.onComplete = exports.onError = exports.onSuccess = exports.getRequestOptions = exports.getClientName = exports.getRequestConfig = exports.isAxiosRequest = exports.defaultClientName = exports.returnRejectedPromiseOnError = undefined;
+exports.onComplete = exports.onError = exports.onCancel = exports.onSuccess = exports.getRequestOptions = exports.getClientName = exports.getRequestConfig = exports.isCancel = exports.isAxiosRequest = exports.defaultClientName = exports.returnRejectedPromiseOnError = undefined;
 
 var _getActionTypes = __webpack_require__(0);
 
@@ -247,6 +255,10 @@ var defaultClientName = exports.defaultClientName = 'default';
 
 var isAxiosRequest = exports.isAxiosRequest = function isAxiosRequest(action) {
   return action.payload && action.payload.request;
+};
+
+var isCancel = exports.isCancel = function isCancel(value) {
+  return !!(value && value.__CANCEL__);
 };
 
 var getRequestConfig = exports.getRequestConfig = function getRequestConfig(action) {
@@ -273,16 +285,45 @@ var onSuccess = exports.onSuccess = function onSuccess(_ref, options) {
       previousAction: action
     }
   };
+
+  if (response instanceof Error) {
+    delete nextAction.payload;
+    nextAction.type = (0, _getActionTypes.getActionTypes)(action, options)[2];
+    nextAction.error = response;
+  }
+
   next(nextAction);
   return nextAction;
 };
 
-var onError = exports.onError = function onError(_ref2, options) {
+var onCancel = exports.onCancel = function onCancel(_ref2, options) {
   var action = _ref2.action,
       next = _ref2.next,
       error = _ref2.error;
 
+  var nextAction = {
+    type: (0, _getActionTypes.getActionTypes)(action, options)[3],
+    error: {
+      data: error.message,
+      status: 0
+    },
+    cancelled: true,
+    meta: {
+      previousAction: action
+    }
+  };
+
+  next(nextAction);
+  return nextAction;
+};
+
+var onError = exports.onError = function onError(_ref3, options) {
+  var action = _ref3.action,
+      next = _ref3.next,
+      error = _ref3.error;
+
   var errorObject = void 0;
+
   if (!error.response) {
     errorObject = {
       data: error.message,
@@ -294,6 +335,7 @@ var onError = exports.onError = function onError(_ref2, options) {
   } else {
     errorObject = error;
   }
+
   var nextAction = {
     type: (0, _getActionTypes.getActionTypes)(action, options)[2],
     error: errorObject,
@@ -307,10 +349,59 @@ var onError = exports.onError = function onError(_ref2, options) {
 };
 
 var onComplete = exports.onComplete = function onComplete() {};
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(3)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
 
 /***/ }),
 /* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _middleware = __webpack_require__(1);
+
+Object.defineProperty(exports, 'default', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(_middleware).default;
+  }
+});
+Object.defineProperty(exports, 'multiClientMiddleware', {
+  enumerable: true,
+  get: function get() {
+    return _middleware.multiClientMiddleware;
+  }
+});
+
+var _getActionTypes = __webpack_require__(0);
+
+Object.defineProperty(exports, 'getActionTypes', {
+  enumerable: true,
+  get: function get() {
+    return _getActionTypes.getActionTypes;
+  }
+});
+Object.defineProperty(exports, 'ERROR_SUFFIX', {
+  enumerable: true,
+  get: function get() {
+    return _getActionTypes.ERROR_SUFFIX;
+  }
+});
+Object.defineProperty(exports, 'SUCCESS_SUFFIX', {
+  enumerable: true,
+  get: function get() {
+    return _getActionTypes.SUCCESS_SUFFIX;
+  }
+});
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/***/ }),
+/* 4 */
 /***/ (function(module, exports) {
 
 // shim for using process in browser
@@ -483,6 +574,10 @@ process.off = noop;
 process.removeListener = noop;
 process.removeAllListeners = noop;
 process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) { return [] }
 
 process.binding = function (name) {
     throw new Error('process.binding is not supported');
@@ -494,55 +589,6 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-
-/***/ }),
-/* 4 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var _middleware = __webpack_require__(1);
-
-Object.defineProperty(exports, 'default', {
-  enumerable: true,
-  get: function get() {
-    return _interopRequireDefault(_middleware).default;
-  }
-});
-Object.defineProperty(exports, 'multiClientMiddleware', {
-  enumerable: true,
-  get: function get() {
-    return _middleware.multiClientMiddleware;
-  }
-});
-
-var _getActionTypes = __webpack_require__(0);
-
-Object.defineProperty(exports, 'getActionTypes', {
-  enumerable: true,
-  get: function get() {
-    return _getActionTypes.getActionTypes;
-  }
-});
-Object.defineProperty(exports, 'ERROR_SUFFIX', {
-  enumerable: true,
-  get: function get() {
-    return _getActionTypes.ERROR_SUFFIX;
-  }
-});
-Object.defineProperty(exports, 'SUCCESS_SUFFIX', {
-  enumerable: true,
-  get: function get() {
-    return _getActionTypes.SUCCESS_SUFFIX;
-  }
-});
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /***/ })
 /******/ ]);

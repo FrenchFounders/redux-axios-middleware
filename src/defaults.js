@@ -22,13 +22,13 @@ export const onSuccess = ({ action, next, response }, options) => {
       previousAction: action
     }
   };
-  
+
   if (response instanceof Error) {
     delete nextAction.payload;
     nextAction.type = getActionTypes(action, options)[2];
     nextAction.error = response;
   }
-  
+
   next(nextAction);
   return nextAction;
 };
